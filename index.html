@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OptumRx · OGA — Case Analyzer</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Crect width='256' height='256' rx='56' fill='%23ff7f00'/%3E%3Ctext x='50%' y='54%' dominant-baseline='middle' text-anchor='middle' font-family='Segoe UI, Roboto, Arial' font-size='92' fill='white'%3EΩ%3C/text%3E%3C/svg%3E"/>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/customParseFormat.js"></script>
+  <style>
+    :root{--brand:#ff7f00;--ink:#111;--muted:#9aa3b2;--bg:#0b0e14;--panel:#0e1423;--stroke:#1f2937;--ok:#10b981;--warn:#f59e0b;--bad:#ef4444;--rxgray:#6b615b}
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;font-family:Inter, Segoe UI, Roboto, Helvetica, Arial, system-ui, -apple-system, sans-serif;color:#e5e7eb;background:linear-gradient(180deg, var(--bg), #0d1220)}
+    header{position:sticky;top:0;z-index:5;background:linear-gradient(90deg, #0b1222, var(--panel));border-bottom:1px solid var(--stroke)}
+    .wrap{max-width:1300px;margin:0 auto;padding:16px 24px}
+    .brandline{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+    .wordmark{display:flex;align-items:flex-end;gap:6px;line-height:1}
+    .wordmark .opt{font-family:Poppins, Inter, Segoe UI, system-ui, sans-serif;font-weight:700;color:var(--brand);letter-spacing:.2px}
+    .wordmark .rx{font-family:Poppins, Inter, Segoe UI, system-ui, sans-serif;font-weight:600;color:var(--rxgray);letter-spacing:.2px}
+    .wordmark .reg{color:var(--rxgray);font-size:.55em;vertical-align:top;margin-left:2px;position:relative;top:-0.65em}
+    @media (min-width: 900px){ .wordmark .opt, .wordmark .rx{font-size:56px} }
+    @media (max-width: 899.98px){ .wordmark .opt, .wordmark .rx{font-size:44px} }
+    .title h1{margin:0;font-size:1.18rem}
+    .title p{margin:2px 0 0;color:#94a3b8;font-size:.92rem}
+    .grid{display:grid;grid-template-columns:1fr;gap:24px}
+    .card{background:linear-gradient(180deg, #0c1222, #0a0f1b);border:1px solid var(--stroke);border-radius:16px;padding:18px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+    .card h2{margin:.2rem 0 1rem;font-size:1.05rem;color:#f3f4f6}
+    .hint{color:#94a3b8;font-size:.9rem}
+    .drop{border:2px dashed #334155;border-radius:14px;padding:18px;text-align:center;background:rgba(255,255,255,0.02)}
+    .drop.dragover{background:rgba(255,127,0,0.08);border-color:var(--brand)}
+    .btn{appearance:none;border:1px solid #334155;background:#0f172a;color:#e5e7eb;padding:10px 14px;border-radius:10px;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+    .btn.primary{background:linear-gradient(180deg, var(--brand), #f97316);border-color:#ea580c;color:#1b1b1b;font-weight:600}
+    .btn.ghost{background:transparent}
+    .btn:disabled{opacity:.6;cursor:not-allowed}
+    .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+    .controls label{font-size:.85rem;color:#cbd5e1}
+    .filetags{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+    .tag{display:inline-flex;align-items:center;gap:6px;border:1px solid #334155;background:#0b1222;color:#d1d5db;border-radius:999px;padding:6px 10px;font-size:.82rem}
+    .statrow{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:10px}
+    @media (max-width: 780px){.statrow{grid-template-columns:repeat(2,1fr)}}
+    .stat{background:linear-gradient(180deg, #0c1325, #0a1020);border:1px solid var(--stroke);border-radius:14px;padding:12px}
+    .stat .k{font:700 1.1rem/1.1 Inter, system-ui}
+    .stat .l{color:#9aa3b2;font-size:.85rem;margin-top:4px}
+    .tablewrap{border:1px solid var(--stroke);border-radius:14px;overflow:auto;background:#0a0f1c}
+    table{border-collapse:separate;border-spacing:0;width:100%;font-size:.92rem}
+    thead th{position:sticky;top:0;background:#0b1222;color:#cbd5e1;text-align:left;font-weight:600;border-bottom:1px solid var(--stroke);padding:10px}
+    tbody td{border-bottom:1px dashed #1f2937;padding:10px;color:#e5e7eb}
+    tr:hover td{background:rgba(255,255,255,0.02)}
+    .aging{font-variant-numeric:tabular-nums}
+    .badge{padding:4px 8px;border-radius:999px;font-size:.78rem;border:1px solid transparent}
+    .b-good{background:rgba(16,185,129,.12);border-color:#115e42;color:#34d399}
+    .b-warn{background:rgba(245,158,11,.12);border-color:#8a5503;color:#fbbf24}
+    .b-bad{background:rgba(239,68,68,.12);border-color:#7f1d1d;color:#fca5a5}
+    footer{opacity:.7;text-align:center;font-size:.8rem;padding:32px}
+    .copybar{display:flex;gap:8px;justify-content:flex-end;margin:8px 0}
+    input[type="search"], input[type="number"], select{background:#0b1222;border:1px solid #1f2937;color:#e5e7eb;border-radius:10px;padding:8px 10px}
+    .twocol{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+    @media (max-width: 1100px){.twocol{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap brandline">
+      <div class="wordmark" aria-label="Optum Rx">
+        <span class="opt">Optum</span><span class="rx"> Rx</span><span class="reg">®</span>
+      </div>
+      <div class="title">
+        <h1>OGA — Case Analyzer</h1>
+        <p>Upload one or more Excel files to compute aging and flag cases nearing SLA. Consolidation supported.</p>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="grid">
+      <div class="card">
+        <h2>1) Upload Excel (multiple supported)</h2>
+        <div id="drop" class="drop" tabindex="0" aria-label="Drop zone">
+          <p style="margin:.2rem 0 .6rem">Drag & drop files here or</p>
+          <button id="pick" class="btn primary">Choose files</button>
+          <input id="file" class="sr" type="file" accept=".xlsx,.xls" multiple />
+          <p class="hint" style="margin-top:10px">Parsing happens locally in your browser; nothing is uploaded.</p>
+        </div>
+        <div class="controls" style="margin-top:14px">
+          <label>Near-SLA (hours): <input type="number" id="nearHrs" min="1" max="72" step="1" value="8" style="width:80px"></label>
+          <label><input type="checkbox" id="includePast"/> Include past due</label>
+          <label>Aging precision: <input type="number" id="precision" min="0" max="3" value="1" style="width:60px"></label>
+          <label>Consolidation: 
+            <select id="consolMode">
+              <option value="all">Sum all rows</option>
+              <option value="unique">Unique by Case ID</option>
+            </select>
+          </label>
+          <button id="clearAll" class="btn ghost">Clear files</button>
+        </div>
+        <div class="filetags" id="fileTags"></div>
+
+        <div class="statrow" id="stats" hidden>
+          <div class="stat"><div class="k" id="statTotal">–</div><div class="l">Total cases (consolidated)</div></div>
+          <div class="stat"><div class="k" id="statAvg">–</div><div class="l">Avg aging (days)</div></div>
+          <div class="stat"><div class="k" id="statMax">–</div><div class="l">Oldest case (days)</div></div>
+          <div class="stat"><div class="k" id="statNear">–</div><div class="l">Nearing SLA</div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="twocol" style="margin-top:24px">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+          <h2 style="margin:0">Aging by Business Segment (Consolidated)</h2>
+          <div class="controls" style="gap:8px">
+            <label>Top N: <input type="number" id="topN" min="5" step="5" value="10" style="width:70px"></label>
+            <label>Sort by:
+              <select id="sortBy">
+                <option value="agingDesc">Aging (desc)</option>
+                <option value="createdAsc">Created On (asc)</option>
+                <option value="createdDesc">Created On (desc)</option>
+              </select>
+            </label>
+            <input type="search" id="searchAging" placeholder="Search Top list (e.g., segment, Case ID, name)" style="flex:1;width:320px">
+          </div>
+          <div class="copybar">
+            <button class="btn" id="copyAging">Copy visible rows</button>
+          </div>
+        </div>
+        <div class="tablewrap">
+          <table id="tblAging" aria-describedby="Top cases by aging">
+            <thead>
+              <tr>
+                <th>Case ID</th>
+                <th>Business Segment</th>
+                <th>Priority</th>
+                <th>Created On</th>
+                <th>Aging (days)</th>
+                <th>SLA Due</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+          <h2 style="margin:0">Cases Nearing SLA (Consolidated)</h2>
+          <div class="controls" style="gap:8px">
+            <input type="search" id="searchSla" placeholder="Search Near-SLA table" style="flex:1;width:320px">
+          </div>
+          <div class="copybar">
+            <button class="btn" id="copySla">Copy visible rows</button>
+          </div>
+        </div>
+        <div class="tablewrap">
+          <table id="tblSla" aria-describedby="Cases nearing SLA">
+            <thead>
+              <tr>
+                <th>Case ID</th>
+                <th>Business Segment</th>
+                <th>Priority</th>
+                <th>Created On</th>
+                <th>SLA Due</th>
+                <th>Time to SLA</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:24px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+        <h2 style="margin:0">Summary by Business Segment</h2>
+        <div class="copybar">
+          <button class="btn" id="copySeg">Copy summary</button>
+        </div>
+      </div>
+      <div class="tablewrap">
+        <table id="tblSeg" aria-describedby="Segment summary">
+          <thead>
+            <tr>
+              <th>Business Segment</th>
+              <th>Count</th>
+              <th>Avg Aging (days)</th>
+              <th>Oldest (days)</th>
+              <th>Share of Total</th>
+              <th>Day 1</th>
+              <th>Day 2</th>
+              <th>Day 3</th>
+              <th>Day 4</th>
+              <th>Day 5</th>
+              <th>Day 5+</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="hint" style="margin-top:8px">Day buckets: Day 1 = 0–&lt;1 day, Day 2 = 1–&lt;2, … Day 5 = 4–&lt;5; <strong>Day 5+ = ≥5</strong>.</p>
+    </section>
+
+    <section class="card" style="margin-top:24px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+        <h2 style="margin:0">Filter by Aging Day → Case List</h2>
+        <div class="controls" style="gap:10px">
+          <label>Select aging day:
+            <select id="agingDayPick">
+              <option value="-1">Choose…</option>
+              <option value="0">Day 1 (0–&lt;1)</option>
+              <option value="1">Day 2 (1–&lt;2)</option>
+              <option value="2">Day 3 (2–&lt;3)</option>
+              <option value="3">Day 4 (3–&lt;4)</option>
+              <option value="4">Day 5 (4–&lt;5)</option>
+              <option value="5plus">Day 5+ (≥5)</option>
+            </select>
+          </label>
+          <label>or exact day #: <input type="number" id="agingDayExact" min="0" step="1" placeholder="e.g., 6" style="width:80px"></label>
+          <button class="btn" id="applyAgingFilter">Apply</button>
+          <input type="search" id="searchAgingFilter" placeholder="Search filtered list" style="flex:1;width:320px">
+        </div>
+        <div class="copybar">
+          <button class="btn" id="copyAgingFilter">Copy filtered rows</button>
+        </div>
+      </div>
+      <div class="tablewrap">
+        <table id="tblAgingFilter" aria-describedby="Cases matching aging day">
+          <thead>
+            <tr>
+              <th>Case ID</th>
+              <th>Business Segment</th>
+              <th>Priority</th>
+              <th>Created On</th>
+              <th>Aging (days)</th>
+              <th>SLA Due</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer>
+      Built for OptumRx · OGA. Design-first, privacy-friendly, runs 100% in your browser.
+    </footer>
+  </main>
+
+  <script>
+    dayjs.extend(window.dayjs_plugin_customParseFormat);
+    const $ = sel => document.querySelector(sel);
+    const $$ = sel => Array.from(document.querySelectorAll(sel));
+
+    const els = {
+      drop: $('#drop'), file: $('#file'), pick: $('#pick'), nearHrs: $('#nearHrs'), includePast: $('#includePast'), precision: $('#precision'),
+      consolMode: $('#consolMode'), clearAll: $('#clearAll'), fileTags: $('#fileTags'),
+      tblAging: $('#tblAging tbody'), tblSla: $('#tblSla tbody'), tblSeg: $('#tblSeg tbody'), tblAgingFilter: $('#tblAgingFilter tbody'),
+      statTotal: $('#statTotal'), statAvg: $('#statAvg'), statMax: $('#statMax'), statNear: $('#statNear'), stats: $('#stats'),
+      searchAging: $('#searchAging'), searchSla: $('#searchSla'), searchAgingFilter: $('#searchAgingFilter'),
+      copyAging: $('#copyAging'), copySla: $('#copySla'), copySeg: $('#copySeg'), copyAgingFilter: $('#copyAgingFilter'),
+      sortBy: $('#sortBy'), topN: $('#topN'),
+      agingDayPick: $('#agingDayPick'), agingDayExact: $('#agingDayExact'), applyAgingFilter: $('#applyAgingFilter')
+    };
+
+    const DATE_FORMATS = ['MM/DD/YYYY h:mm A','M/D/YYYY h:mm A','MM/DD/YYYY','M/D/YYYY'];
+
+    function parseDate(v){
+      if(!v) return null;
+      if(typeof v === 'number'){
+        const d = XLSX.SSF.parse_date_code(v);
+        return dayjs(new Date(d.y, d.m-1, d.d, d.H||0, d.M||0, d.S||0));
+      }
+      if(v instanceof Date){ return dayjs(v); }
+      const s = String(v).trim();
+      for(const fmt of DATE_FORMATS){ const t = dayjs(s, fmt, true); if(t.isValid()) return t; }
+      const t = dayjs(s); return t.isValid()? t : null;
+    }
+
+    function toFixed(num, prec){ return (Math.round(num * Math.pow(10, prec)) / Math.pow(10, prec)).toFixed(prec); }
+
+    function normalizeHeaders(obj){
+      const map={}; Object.keys(obj).forEach(k=> map[k.toLowerCase().trim()]=k);
+      const get = label => { const key=(label||'').toLowerCase(); if(map[key]) return map[key]; const hit=Object.keys(map).find(m=>m.includes(key)); return hit? map[hit]: null; };
+      return {get};
+    }
+
+    function tsvFromVisible(table){
+      const rows=[]; const trAll=Array.from(table.querySelectorAll('tbody tr'));
+      const visible = trAll.filter(tr=> tr.style.display !== 'none');
+      const headers = Array.from(table.querySelectorAll('thead th')).map(th=> th.textContent.trim());
+      rows.push(headers.join('\t'));
+      for(const tr of visible){ const cols = Array.from(tr.querySelectorAll('td')).map(td=> td.innerText.replace(/\s+/g,' ').trim()); rows.push(cols.join('\t')); }
+      return rows.join('\n');
+    }
+
+    function filterTable(input, tableId){
+      const q = (input?.value || '').toLowerCase();
+      const rows = $$("#"+tableId+" tbody tr");
+      rows.forEach(tr=>{ const hay=tr.innerText.toLowerCase(); tr.style.display = hay.includes(q)? '' : 'none'; });
+    }
+
+    const store = {
+      files: [],
+      clear(){ this.files = []; renderFileTags(); renderAll(); }
+    };
+
+    async function readFile(file){
+      return new Promise((resolve, reject)=>{
+        const fr = new FileReader();
+        fr.onerror = () => reject(fr.error);
+        fr.onload = () => { try{ const data = new Uint8Array(fr.result); const wb = XLSX.read(data, {type:'array'}); resolve(wb); } catch(err){ reject(err); } };
+        fr.readAsArrayBuffer(file);
+      });
+    }
+
+    function renderFileTags(){
+      els.fileTags.innerHTML = '';
+      for(const f of store.files){
+        const span = document.createElement('span');
+        span.className = 'tag';
+        span.innerHTML = `<strong>${f.name}</strong><span style="opacity:.7">(${f.wb.SheetNames.length} sheets)</span>`;
+        els.fileTags.appendChild(span);
+      }
+    }
+
+    function gatherData(){
+      const prec = parseInt(els.precision.value||'1',10);
+      const now = dayjs();
+      const casesOut = [];
+      const slaOut = [];
+
+      for(const f of store.files){
+        for(const sName of f.wb.SheetNames){
+          const sh = f.wb.Sheets[sName];
+          const rows = XLSX.utils.sheet_to_json(sh, {defval:''});
+          if(!rows.length) continue;
+          const hdr = normalizeHeaders(rows[0]);
+
+          const keyCase = hdr.get('Case ID') || hdr.get('CaseID') || hdr.get('Case');
+          const keySeg  = hdr.get('Business Segment') || hdr.get('BusinessSegment') || hdr.get('Segment');
+          const keyPrio = hdr.get('Priority');
+          const keyCreated = hdr.get('Created On') || hdr.get('CreatedOn') || hdr.get('Created');
+          const keyDue = hdr.get('Time AutoDeny') || hdr.get('TimeAutoDeny') || hdr.get('AutoDeny') || hdr.get('Auto Deny');
+
+          if(keySeg && keyCreated){
+            for(const r of rows){
+              const created = parseDate(r[keyCreated]);
+              if(!created) continue;
+              const agingDays = Math.max(0, now.diff(created,'hour')/24);
+              const agingFmt = toFixed(agingDays, prec);
+              const slaDue = keyDue ? parseDate(r[keyDue]) : null;
+              casesOut.push({
+                caseId: r[keyCase]||'', seg: r[keySeg]||'', prio: r[keyPrio]||'', created, agingDays, agingFmt, slaDue
+              });
+            }
+          }
+
+          if(keyDue){
+            for(const r of rows){
+              const due = parseDate(r[keyDue]);
+              if(!due) continue;
+              const created2 = keyCreated ? parseDate(r[keyCreated]) : null;
+              slaOut.push({ caseId: r[keyCase]||'', seg: r[keySeg]||'', prio: r[keyPrio]||'', created: created2, due });
+            }
+          }
+        }
+      }
+
+      if(els.consolMode.value === 'unique'){
+        const seen = new Map();
+        const unique = [];
+        for(const row of casesOut){
+          const key = String(row.caseId||'').trim() || `${row.seg}:${row.prio}:${row.created?.valueOf()}`;
+          if(!seen.has(key)) { seen.set(key, true); unique.push(row); }
+        }
+        return {cases: unique, sla: slaOut};
+      }
+      return {cases: casesOut, sla: slaOut};
+    }
+
+    function sortCases(cases){
+      const how = els.sortBy.value;
+      const copy = cases.slice();
+      if(how === 'agingDesc') copy.sort((a,b)=> b.agingDays - a.agingDays);
+      else if(how === 'createdAsc') copy.sort((a,b)=> a.created.valueOf() - b.created.valueOf());
+      else if(how === 'createdDesc') copy.sort((a,b)=> b.created.valueOf() - a.created.valueOf());
+      return copy;
+    }
+
+    function populateTopList(cases){
+      els.tblAging.innerHTML = '';
+      const topN = Math.max(1, parseInt(els.topN.value||'10',10));
+      const arr = sortCases(cases).slice(0, topN);
+      const frag = document.createDocumentFragment();
+      for(const row of arr){
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${row.caseId}</td>
+          <td>${row.seg}</td>
+          <td>${row.prio||''}</td>
+          <td>${row.created ? row.created.format('MM/DD/YYYY h:mm A') : ''}</td>
+          <td class="aging">${row.agingFmt}</td>
+          <td>${row.slaDue ? row.slaDue.format('MM/DD/YYYY h:mm A') : ''}</td>`;
+        frag.appendChild(tr);
+      }
+      els.tblAging.appendChild(frag);
+      filterTable(els.searchAging, 'tblAging');
+    }
+
+    function populateAgingFilter(cases){
+      els.tblAgingFilter.innerHTML = '';
+      const pickRaw = els.agingDayPick.value;
+      const exactStr = els.agingDayExact.value;
+      let mode = null; // {type:'eq', val} or {type:'ge5'}
+      if(pickRaw === '5plus'){ mode = {type:'ge5'}; } else {
+        const pick = parseInt(pickRaw,10);
+        if(!isNaN(pick) && pick >= 0){ mode = {type:'eq', val: pick}; }
+      }
+      if(exactStr !== ''){ const v = parseInt(exactStr,10); if(!isNaN(v) && v>=0) mode = {type:'eq', val: v}; }
+      if(mode === null) return;
+
+      const matches = cases.filter(r => mode.type==='ge5' ? (r.agingDays >= 5) : (Math.floor(r.agingDays) === mode.val));
+      const frag = document.createDocumentFragment();
+      for(const row of matches){
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${row.caseId}</td>
+          <td>${row.seg}</td>
+          <td>${row.prio||''}</td>
+          <td>${row.created ? row.created.format('MM/DD/YYYY h:mm A') : ''}</td>
+          <td class="aging">${row.agingFmt}</td>
+          <td>${row.slaDue ? row.slaDue.format('MM/DD/YYYY h:mm A') : ''}</td>`;
+        frag.appendChild(tr);
+      }
+      els.tblAgingFilter.appendChild(frag);
+      filterTable(els.searchAgingFilter, 'tblAgingFilter');
+    }
+
+    function renderAll(){
+      const nearHours = parseInt(els.nearHrs.value||'8',10);
+      const includePast = els.includePast.checked;
+      const now = dayjs();
+
+      const {cases, sla} = gatherData();
+
+      let sum=0, maxA=0, cnt=0;
+      for(const r of cases){ sum += r.agingDays; if(r.agingDays>maxA) maxA=r.agingDays; cnt++; }
+      if(cnt){
+        els.stats.hidden = false;
+        els.statTotal.textContent = cnt;
+        els.statAvg.textContent = toFixed(sum/cnt, parseInt(els.precision.value||'1',10));
+        els.statMax.textContent = toFixed(maxA, parseInt(els.precision.value||'1',10));
+      } else { els.stats.hidden = true; }
+
+      populateTopList(cases);
+
+      els.tblSla.innerHTML = '';
+      let nearCount = 0;
+      const fragB = document.createDocumentFragment();
+      for(const r of sla){
+        const hoursToDue = (r.due.diff(now,'minute'))/60;
+        const isPast = hoursToDue < 0;
+        const isNear = (!isPast && hoursToDue <= nearHours) || (includePast && isPast);
+        if(!isNear) continue;
+        nearCount++;
+        const badge = isPast ? 'b-bad' : (hoursToDue <= Math.max(nearHours/2, 2) ? 'b-warn' : 'b-good');
+        const status = isPast ? 'Past due' : (hoursToDue <= Math.max(nearHours/2, 2) ? 'Urgent' : 'Upcoming');
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${r.caseId}</td>
+          <td>${r.seg||''}</td>
+          <td>${r.prio||''}</td>
+          <td>${r.created ? r.created.format('MM/DD/YYYY h:mm A') : ''}</td>
+          <td>${r.due.format('MM/DD/YYYY h:mm A')}</td>
+          <td>${toFixed(hoursToDue, 1)} h</td>
+          <td><span class="badge ${badge}">${status}</span></td>`;
+        fragB.appendChild(tr);
+      }
+      els.tblSla.appendChild(fragB);
+      els.statNear.textContent = nearCount;
+      filterTable(els.searchSla, 'tblSla');
+
+      const segMap = new Map();
+      for(const r of cases){
+        const seg = r.seg || '(blank)';
+        if(!segMap.has(seg)) segMap.set(seg, {count:0,sum:0,max:0, d:[0,0,0,0,0], gt5:0});
+        const s = segMap.get(seg);
+        s.count++; s.sum += r.agingDays; if(r.agingDays>s.max) s.max=r.agingDays;
+        const bucket = Math.floor(r.agingDays);
+        if(bucket >=0 && bucket <=4){ s.d[bucket]++; } else if(bucket >=5){ s.gt5++; }
+      }
+
+      els.tblSeg.innerHTML = '';
+      const fragS = document.createDocumentFragment();
+      const prec = parseInt(els.precision.value||'1',10);
+      const rowsSeg = Array.from(segMap.entries()).sort((a,b)=> b[1].count - a[1].count);
+      for(const [seg, v] of rowsSeg){
+        const avg = v.count ? v.sum / v.count : 0;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${seg}</td>
+          <td>${v.count}</td>
+          <td>${toFixed(avg, prec)}</td>
+          <td>${toFixed(v.max, prec)}</td>
+          <td>${cnt? toFixed((v.count/cnt)*100,1) : '0.0'}%</td>
+          <td>${v.d[0]}</td>
+          <td>${v.d[1]}</td>
+          <td>${v.d[2]}</td>
+          <td>${v.d[3]}</td>
+          <td>${v.d[4]}</td>
+          <td>${v.gt5}</td>`;
+        fragS.appendChild(tr);
+      }
+      els.tblSeg.appendChild(fragS);
+
+      populateAgingFilter(cases);
+
+      window.__CASES = cases;
+    }
+
+    function wire(){
+      document.getElementById('pick').addEventListener('click', ()=> document.getElementById('file').click());
+      document.getElementById('file').addEventListener('change', async (e)=>{
+        if(!e.target.files.length) return;
+        for(const file of e.target.files){
+          const wb = await readFile(file);
+          store.files.push({name: file.name, wb});
+        }
+        renderFileTags();
+        renderAll();
+      });
+
+      const dz = document.getElementById('drop');
+      ;['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, e=>{e.preventDefault();e.stopPropagation();dz.classList.add('dragover')}));
+      ;['dragleave','drop'].forEach(ev => dz.addEventListener(ev, e=>{e.preventDefault();e.stopPropagation();dz.classList.remove('dragover')}));
+      dz.addEventListener('drop', async e => {
+        const files = Array.from(e.dataTransfer.files || []);
+        for(const file of files){ const wb = await readFile(file); store.files.push({name:file.name, wb}); }
+        renderFileTags(); renderAll();
+      });
+
+      ;['change','keyup'].forEach(ev => document.getElementById('nearHrs').addEventListener(ev, renderAll));
+      document.getElementById('includePast').addEventListener('change', renderAll);
+      document.getElementById('precision').addEventListener('change', renderAll);
+      document.getElementById('consolMode').addEventListener('change', renderAll);
+      document.getElementById('clearAll').addEventListener('click', ()=>{ store.clear(); document.getElementById('file').value=''; document.getElementById('searchAging').value=''; document.getElementById('searchSla').value=''; document.getElementById('searchAgingFilter').value=''; document.getElementById('agingDayPick').value='-1'; document.getElementById('agingDayExact').value=''; document.getElementById('topN').value='10'; });
+
+      document.getElementById('sortBy').addEventListener('change', ()=>{ if(window.__CASES) populateTopList(window.__CASES); });
+      document.getElementById('topN').addEventListener('change', ()=>{ if(window.__CASES) populateTopList(window.__CASES); });
+
+      document.getElementById('searchAging').addEventListener('input', ()=> filterTable(document.getElementById('searchAging'), 'tblAging'));
+      document.getElementById('searchSla').addEventListener('input', ()=> filterTable(document.getElementById('searchSla'), 'tblSla'));
+      document.getElementById('searchAgingFilter').addEventListener('input', ()=> filterTable(document.getElementById('searchAgingFilter'), 'tblAgingFilter'));
+
+      document.getElementById('applyAgingFilter').addEventListener('click', ()=>{ if(window.__CASES) populateAgingFilter(window.__CASES); });
+
+      document.getElementById('copyAging').addEventListener('click', async ()=>{ const txt = tsvFromVisible(document.getElementById('tblAging')); await navigator.clipboard.writeText(txt); document.getElementById('copyAging').textContent='Copied!'; setTimeout(()=> document.getElementById('copyAging').textContent='Copy visible rows',1200); });
+      document.getElementById('copySla').addEventListener('click', async ()=>{ const txt = tsvFromVisible(document.getElementById('tblSla')); await navigator.clipboard.writeText(txt); document.getElementById('copySla').textContent='Copied!'; setTimeout(()=> document.getElementById('copySla').textContent='Copy visible rows',1200); });
+      document.getElementById('copySeg').addEventListener('click', async ()=>{ const txt = tsvFromVisible(document.getElementById('tblSeg')); await navigator.clipboard.writeText(txt); document.getElementById('copySeg').textContent='Copied!'; setTimeout(()=> document.getElementById('copySeg').textContent='Copy summary',1200); });
+      document.getElementById('copyAgingFilter').addEventListener('click', async ()=>{ const txt = tsvFromVisible(document.getElementById('tblAgingFilter')); await navigator.clipboard.writeText(txt); document.getElementById('copyAgingFilter').textContent='Copied!'; setTimeout(()=> document.getElementById('copyAgingFilter').textContent='Copy filtered rows',1200); });
+    }
+
+    wire();
+  </script>
+</body>
+</html>
